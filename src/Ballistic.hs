@@ -33,8 +33,6 @@ data BallisticApp = BallisticApp {
     }
 
 
-type ParticleIDGen = IORef Int
-
 
 createNew :: ParticleIDGen -> IO (AmmoRound)
 createNew genRef = do

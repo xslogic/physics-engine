@@ -17,46 +17,57 @@ data ParticleContact = NullContact | Contact {
 
 
 data ParticleLink = Cable {
-      part0 :: Particle,
-      part1 :: Particle,
+      part :: Particle,
+      anchor :: Either Particle Position,
       restitution' :: Float,
       maxLength :: Float
     } | Rod {
-      part0 :: Particle,
-      part1 :: Particle,
+      part :: Particle,
+      anchor :: Either Particle Position,
       len :: Float
     }
 
 
+
 createContacts :: ParticleLink -> IO [ParticleContact]
-createContacts cable@(Cable part0 part1 r mL) = do
-  pos0 <- readIORef $ pos part0
-  pos1 <- readIORef $ pos part1
+createContacts cable@(Cable part anchor r mL) = do
+  pos0 <- readIORef $ pos part
+  pos1 <- case (anchor) of
+            Left part1 -> readIORef $ pos part1
+            Right pos' -> return pos'
   let m = magnitude $ pos0 <-> pos1
   if (mL > m)
       then return []
       else return $ [Contact {
-                 p0 = part0,
-                 p1 = Just part1,
+                 p0 = part,
+                 p1 = (case (anchor) of
+                         Left part1 -> Just part1
+                         Right pos' -> Nothing),
                  restitution = r,
                  penetration = (m - mL),
                  contactNormal = normalize (pos1 <-> pos0)
                }]
-createContacts rod@(Rod part0 part1 mL) = do
-  pos0 <- readIORef $ pos part0
-  pos1 <- readIORef $ pos part1
+createContacts rod@(Rod part anchor mL) = do
+  pos0 <- readIORef $ pos part
+  pos1 <- case (anchor) of
+            Left part1 -> readIORef $ pos part1
+            Right pos' -> return pos'
   let m = magnitude $ pos0 <-> pos1
       n = normalize (pos1 <-> pos0)
   if (mL == m)
       then return []
       else return $ [Contact {
-                 p0 = part0,
-                 p1 = Just part1,
+                 p0 = part,
+                 p1 = (case (anchor) of
+                         Left part1 -> Just part1
+                         Right pos' -> Nothing),
                  restitution = 0,
                  penetration = abs (m - mL),
                  contactNormal = if (m > mL) then n else (scale (-1) n)
                }]
-                         
+                   
+
+      
 
 
 calculateSeparatingVelocity :: ParticleContact -> IO (Float)

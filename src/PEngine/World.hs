@@ -27,21 +27,22 @@ instance C.ContactGenerator CGen where
     generateContacts _ ps limit = generateContacts' limit ps []
 
 
+data CG = forall a. (C.ContactGenerator a) => CG a
+data FG = forall a. (ForceGenerator a) => FG a
 
 
-data ParticleWorld = forall a b. (C.ContactGenerator a, ForceGenerator b) => PWorld {
+data ParticleWorld = PWorld {
       particles :: IORef [Particle],
-      contactGens :: IORef [a],
-      forceGenMap :: IORef (Map Particle [b]),
+      contactGens :: IORef [CG],
+      forceGenMap :: IORef (Map Particle [FG]),
       maxContacts :: Int
     }
 
-getContacts' :: (C.ContactGenerator a) => 
-                Int -> [Particle] -> [a] -> [C.ParticleContact] -> IO [C.ParticleContact]
+getContacts' :: Int -> [Particle] -> [CG] -> [C.ParticleContact] -> IO [C.ParticleContact]
 getContacts' _ [] _ pcs = return pcs
 getContacts' _ _ [] pcs = return pcs
 getContacts' 0 _ _  pcs = return pcs
-getContacts' l ps (cg:cgs) pcs = do
+getContacts' l ps ((CG cg):cgs) pcs = do
   pcs' <- C.generateContacts cg ps l
   let l' = length pcs'
   if (l - l' > 0)
@@ -67,7 +68,7 @@ updateForces (PWorld psRef _ fgRef _ ) t = do
   mapM_ (\p -> f p fgMap t) ps 
     where f = \p fgm t -> case (M.lookup p fgm) of
                             Nothing -> return ()
-                            Just fgs -> updateForce t p fgs
+                            Just fgs -> mapM_ (\(FG fg) -> updateForce t p fg) fgs
   
 
 resolveContacts :: ParticleWorld -> Time -> IO ()
@@ -82,3 +83,15 @@ runPhysics pw t = do
   updateForces pw t
   integrateWorld pw t
   resolveContacts pw t
+
+initWorld :: ParticleIDGen -> Int -> IO (ParticleWorld)
+initWorld idRef numParts = do
+  ps <- mapM (\_ -> stationaryParticle idRef 0.0) [1..numParts]
+  let fgMap = foldl (\m p -> M.insert p [FG GravityFG] m) M.empty ps
+  psRef <- newIORef ps
+  cgRef <- newIORef [CG GroundContactGenerator]
+  fgmRef <- newIORef fgMap
+  let maxC = (length ps) * 10
+  return $ PWorld psRef cgRef fgmRef maxC
+  
+  

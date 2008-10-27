@@ -177,6 +177,17 @@ instance Application MassAggApp where
                                                  translate $ Vector3 x' y' z'
                                                  renderObject Solid $ GLUT.Sphere' 0.1 20 10
                                                  ) ps
+
+    update (MassAggApp pw) tdRef = do
+      td <- get tdRef
+      let duration = ((fromIntegral (lastFrameDuration td))::Float) * 0.001
+      if (duration <= 0.0)
+         then return ()
+         else runPhysics pw duration
+      update Basic tdRef
+      
+
+
                                   
 
 

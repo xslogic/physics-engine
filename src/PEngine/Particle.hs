@@ -31,7 +31,10 @@ zeroV = origin
 g = Vector 0 (-10) 0
 
 
-stationaryParticle :: IORef Int -> Float -> IO (Particle)
+type ParticleIDGen = IORef Int
+
+
+stationaryParticle :: ParticleIDGen -> Float -> IO (Particle)
 stationaryParticle iRef m = do
   mR <- newIORef m
   pR <- newIORef origin
