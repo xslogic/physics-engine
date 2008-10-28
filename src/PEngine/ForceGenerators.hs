@@ -55,7 +55,7 @@ instance ForceGenerator StandardForceGenerator where
 
     updateForce _ p GravityFG = do
       m <- readIORef $ mass p
-      applyForce p (scale m g) 
+      applyForce p (scale 0 g) 
 
     updateForce _ p (DragFG x y) = do
       v <- readIORef $ vel p

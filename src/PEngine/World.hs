@@ -18,9 +18,9 @@ generateContacts' _ [] pcs = return pcs
 generateContacts' 0 _ pcs  = return pcs
 generateContacts' n (p:ps) pcs = do
   pos' <- readIORef $ pos p
-  let y' = y pos'
-  if (0 > y')
-     then generateContacts' (n - 1) ps $ (C.Contact p Nothing 0.2 (-y') (Vector 0 1 0)):pcs
+  y' <- newIORef (-1 * (y pos'))
+  if (0 > (y pos'))
+     then generateContacts' (n - 1) ps $ (C.Contact p Nothing 0.2 y' (Vector 0 1 0)):pcs
      else generateContacts' n ps pcs
 
 instance C.ContactGenerator CGen where

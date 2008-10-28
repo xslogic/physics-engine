@@ -168,10 +168,13 @@ instance Application MassAggApp where
                                   clear [ColorBuffer, DepthBuffer]
                                   loadIdentity
                                   lookAt (Vertex3 0.0 3.5 8.0)
-                                             (Vertex3 0.0 5.0 22.0)
+                                             (Vertex3 0.0 3.5 0.0)
                                              (Vector3 (0.0::GLdouble) 1.0 0.0)
                                   ps <- get psRef
                                   mapM_ (\p -> preservingMatrix $ do
+                                                 {--
+                                                 putStrLn $ " Particle : " ++ (show (P.pid p))
+                                                 --}
                                                  (V.Vector x' y' z') <- get $ P.pos p
                                                  currentColor $= (Color4 0 0 0 1)
                                                  translate $ Vector3 x' y' z'
@@ -181,10 +184,16 @@ instance Application MassAggApp where
     update (MassAggApp pw) tdRef = do
       td <- get tdRef
       let duration = ((fromIntegral (lastFrameDuration td))::Float) * 0.001
+      if (duration > 0.0)
+         then runPhysics pw duration
+         else return ()
+      update Basic tdRef
+
+{--
       if (duration <= 0.0)
          then return ()
-         else runPhysics pw duration
-      update Basic tdRef
+         else 
+-}
       
 
 

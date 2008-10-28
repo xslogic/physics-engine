@@ -9,7 +9,7 @@ data ParticleContact = NullContact | Contact {
       p0 :: Particle,
       p1 :: Maybe Particle,
       restitution :: Float,
-      penetration :: Float,
+      penetration :: IORef Float,
       contactNormal :: Vector
     } deriving Show
 
@@ -25,7 +25,7 @@ data ParticleLink = Cable {
       part :: Particle,
       anchor :: Either Particle Position,
       len :: Float
-    }
+    } deriving Show
 
 
 
@@ -36,6 +36,7 @@ createContacts cable@(Cable part anchor r mL) = do
             Left part1 -> readIORef $ pos part1
             Right pos' -> return pos'
   let m = magnitude $ pos0 <-> pos1
+  penRef <- newIORef (m - mL)
   if (mL > m)
       then return []
       else return $ [Contact {
@@ -44,7 +45,7 @@ createContacts cable@(Cable part anchor r mL) = do
                          Left part1 -> Just part1
                          Right pos' -> Nothing),
                  restitution = r,
-                 penetration = (m - mL),
+                 penetration = penRef,
                  contactNormal = normalize (pos1 <-> pos0)
                }]
 createContacts rod@(Rod part anchor mL) = do
@@ -54,6 +55,7 @@ createContacts rod@(Rod part anchor mL) = do
             Right pos' -> return pos'
   let m = magnitude $ pos0 <-> pos1
       n = normalize (pos1 <-> pos0)
+  penRef <- newIORef $ abs (m - mL)
   if (mL == m)
       then return []
       else return $ [Contact {
@@ -62,7 +64,7 @@ createContacts rod@(Rod part anchor mL) = do
                          Left part1 -> Just part1
                          Right pos' -> Nothing),
                  restitution = 0,
-                 penetration = abs (m - mL),
+                 penetration = penRef,
                  contactNormal = if (m > mL) then n else (scale (-1) n)
                }]
                    
@@ -111,36 +113,71 @@ applyImpulses p0 (Just p1) im = do
   applyImpulses p1 Nothing $ scale (-1) im
 
 
-applyPenetration :: Particle -> Maybe Particle -> Vector -> IO ()
+applyPenetration :: Particle -> Maybe Particle -> Vector -> 
+                    IO (Vector, Vector)
 applyPenetration p0 Nothing im = do
   m <- readIORef $ mass p0
   p <- readIORef $ pos p0
-  updatePos p0 $ p <+> (scale (1 / m) im)
+  let move = (scale (1 / m) im)
+  updatePos p0 $ p <+> move
+  return (move, zeroV)
 applyPenetration p0 (Just p1) im = do
-  applyPenetration p0 Nothing im
-  applyPenetration p1 Nothing im
-
+  (m0, _) <- applyPenetration p0 Nothing im
+  (m1, _) <- applyPenetration p1 Nothing (scale (-1) im)
+  return (m0, m1)
 
 
 func' (x, p') p = do
   v <- calculateSeparatingVelocity p
-  if (x > v)
+  pen <- readIORef $ penetration p
+  if ((v < x) && ((v < 0) || (pen > 0)))
      then return (v, p)
      else return (x, p')
+
+
+{-- (ParticleContact part0 (Just part1) _ pen cn) -}
+adjustContact' :: ParticleContact -> ParticleContact -> (Vector, Vector) -> IO () 
+adjustContact' NullContact _ _ = return ()
+adjustContact' _ NullContact _ = return ()
+adjustContact' pc0 pc1 (v0, v1) = do
+  let (Contact p0 mP1 _ pen cn) = pc0
+      (Contact p0' mP1' _ _ _) = pc1
+      adjPen = (\p v -> do { penit <- readIORef p; writeIORef p (penit + v) })
+  if (p0 == p0') 
+     then adjPen pen (-1 * (v0 <.> cn))
+     else case (mP1') of
+            Just p1' -> if (p0 == p1')
+                                  then adjPen pen (-1 * (v1 <.> cn))
+                                  else return ()
+            Nothing -> return ()
+  case (mP1) of
+    Just p1 -> if (p1 == p0')
+                 then adjPen pen $ v0 <.> cn
+                 else case (mP1') of
+                        Just p1' -> if (p1 == p1')
+                                      then adjPen pen $ v1 <.> cn
+                                      else return ()
+                        Nothing -> return ()
+    Nothing -> return ()
+                         
 
 resolveContacts :: [ParticleContact] -> Int -> Time -> IO ()
 resolveContacts _ 0 _ = return ()
 resolveContacts pcs iter t = do
- (m, p) <- foldM func' (0, NullContact) pcs
- resolveContact p t
+ (m, pc) <- foldM func' ((1/0), NullContact) pcs
+ (m0, m1) <- resolveContact pc t
+ mapM_ (\pc' -> adjustContact' pc' pc (m0, m1)) pcs
  resolveContacts pcs (iter - 1) t
 
 
-resolveContact :: ParticleContact -> Time -> IO ()
-resolveContact p t = resolveVelocity p t >> resolveInterPenetration p
+resolveContact :: ParticleContact -> Time -> IO (Vector, Vector)
+resolveContact p t = do
+  resolveVelocity p t 
+  resolveInterPenetration p
 
 
 resolveVelocity :: ParticleContact -> Time -> IO ()
+resolveVelocity NullContact _ = return ()
 resolveVelocity c@(Contact p0 p1 r _ cn) t = do
   sV <- calculateSeparatingVelocity c
   if (sV > 0)
@@ -162,16 +199,18 @@ resolveVelocity c@(Contact p0 p1 r _ cn) t = do
             applyImpulses p0 p1 impulsePerIMass
                 
            
-resolveInterPenetration :: ParticleContact -> IO ()
-resolveInterPenetration c@(Contact p0 p1 r p cn) = do
+resolveInterPenetration :: ParticleContact -> IO (Vector, Vector)
+resolveInterPenetration NullContact = return (zeroV, zeroV)
+resolveInterPenetration c@(Contact p0 p1 r pRef cn) = do
+  p <- readIORef pRef
   if (p <= 0)
-     then return ()
+     then return (zeroV, zeroV)
      else do
        tim <- totalInverseMass c
        if (tim <= 0)
-          then return ()
+          then return (zeroV, zeroV)
           else do
-            let movePerIMass = scale ((-1 * p) / tim) cn
+            let movePerIMass = scale (p / tim) cn
             applyPenetration p0 p1 movePerIMass
 
 
