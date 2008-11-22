@@ -4,7 +4,7 @@ module Main where
 import Graphics.Rendering.OpenGL as OGL
 import Graphics.UI.GLUT as GLUT
 import Data.IORef
-import Demo
+import Demo.Bootstrap
 import Int
 
 import PEngine.Vector as V

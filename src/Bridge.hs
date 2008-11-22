@@ -3,7 +3,7 @@ module Main where
 import Graphics.Rendering.OpenGL as OGL
 import Graphics.UI.GLUT as GLUT
 import Data.IORef
-import Demo
+import Demo.Bootstrap
 import Int
 
 import PEngine.Vector as V
@@ -21,7 +21,7 @@ data Bridge = Bridge {
     }
 
 baseMass = 1
-extraMass = 10
+extraMass = 200
 
 getPos' :: Int -> P.Position
 getPos' i = V.Vector x' 4 z' 
@@ -86,7 +86,7 @@ update' mdpRef ps i' f1 f2 = do
 
 fmodf x = if (x > 0)
             then (fromIntegral (floor x), x - (fromIntegral (floor x)))
-            else (fromIntegral (ceiling x),x - (fromIntegral (ceiling x)))
+            else (fromIntegral (ceiling x), (fromIntegral (ceiling x)) - x)
 
 updateAdditionalMass :: Bridge -> IO ()
 updateAdditionalMass (Bridge pw@(PWorld psRef _ _ _) _ _ _ mpRef mdpRef) = do
